@@ -33,9 +33,10 @@ socket.on("user_left", (data) => {
 
 socket.on("new_message", (data) => {
     console.log(data);
-    const decryptedMessage = vigenereDecrypt(data.message, data.key);
+    const decryptedMessage = caesarDecrypt(data.message, data.key);
     addMessage(decryptedMessage, "user", data.username, data.avatar);
 });
+
 
 sendButton.addEventListener("click", sendMessage);
 messageInput.addEventListener("keypress", (e) => {
@@ -43,20 +44,16 @@ messageInput.addEventListener("keypress", (e) => {
 });
 updateUsernameButton.addEventListener("click", updateUsername);
 
-
-function vigenereDecrypt(text, key) {
+function caesarDecrypt(text, shift) {
     const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ";
     let decrypted = "";
-    key = key.repeat(Math.ceil(text.length / key.length)).slice(0, text.length);
 
     for (let i = 0; i < text.length; i++) {
         let char = text[i];
-        let keyChar = key[i];
         let charIndex = alphabet.indexOf(char);
-        let keyIndex = alphabet.indexOf(keyChar);
 
         if (charIndex !== -1) {
-            let newIndex = (charIndex - keyIndex + alphabet.length) % alphabet.length;
+            let newIndex = (charIndex - shift + alphabet.length) % alphabet.length;
             decrypted += alphabet[newIndex];
         } else {
             decrypted += char;

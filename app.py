@@ -8,25 +8,22 @@ socketio = SocketIO(app)
 
 users = {}
 
-# Fonction de génération de clé aléatoire
-def generate_random_key(length=8):
-    return ''.join(random.choices(string.ascii_letters, k=length))
+def generate_random_shift():
+    return random.randint(1, 25)
 
-# Chiffrement Vigenère
-def vigenere_encrypt(text, key):
+def caesar_encrypt(text, shift):
     alphabet = string.ascii_letters + string.digits + string.punctuation + " "
     encrypted = ""
-    key = key * (len(text) // len(key)) + key[:len(text) % len(key)]
 
-    for i in range(len(text)):
-        char = text[i]
-        key_char = key[i]
+    for char in text:
         if char in alphabet:
-            new_index = (alphabet.index(char) + alphabet.index(key_char)) % len(alphabet)
+            new_index = (alphabet.index(char) + shift) % len(alphabet)
             encrypted += alphabet[new_index]
         else:
-            encrypted += char
+            encrypted += char 
     return encrypted
+
+
 
 @app.route('/')
 def index():
@@ -57,21 +54,22 @@ def handle_disconnect():
         emit("user_left", {
             "username": user["username"]
         }, broadcast=True)
+        # Chiffrement César
 
 @socketio.on("send_message")
 def handle_message(data):
     user = users.get(request.sid)
     if user:
-        key = generate_random_key()
-        encrypted_message = vigenere_encrypt(data["message"], key)
+        shift = random.randint(1, 25)
+        encrypted_message = caesar_encrypt(data["message"], shift)
 
-        # Envoi du message chiffré et de la clé aux clients
         emit("new_message", {
             "username": user["username"],
             "avatar": user["avatar"],
             "message": encrypted_message,
-            "key": key  
+            "key": shift
         }, broadcast=True)
+
 
 @socketio.on("update_username")
 def handle_update_username(data):
