@@ -1,6 +1,10 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+import os
 import random
+import base64
 import string
 
 app = Flask(__name__)
@@ -8,22 +12,21 @@ socketio = SocketIO(app)
 
 users = {}
 
-def generate_random_shift():
-    return random.randint(1, 25)
+def generate_aes_key():
+    return os.urandom(32)
 
-def caesar_encrypt(text, shift):
-    alphabet = string.ascii_letters + string.digits + string.punctuation + " "
-    encrypted = ""
+def generate_iv():
+    return os.urandom(16)  # AES requires a 16-byte IV for CBC mode
 
-    for char in text:
-        if char in alphabet:
-            new_index = (alphabet.index(char) + shift) % len(alphabet)
-            encrypted += alphabet[new_index]
-        else:
-            encrypted += char 
-    return encrypted
+def aes_encrypt(text, key, iv):
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
 
+    pad_len = 16 - len(text) % 16
+    text = text + chr(pad_len) * pad_len
 
+    encrypted = encryptor.update(text.encode()) + encryptor.finalize()
+    return base64.b64encode(encrypted).decode()
 
 @app.route('/')
 def index():
@@ -54,22 +57,22 @@ def handle_disconnect():
         emit("user_left", {
             "username": user["username"]
         }, broadcast=True)
-        # Chiffrement César
 
 @socketio.on("send_message")
 def handle_message(data):
     user = users.get(request.sid)
     if user:
-        shift = random.randint(1, 25)
-        encrypted_message = caesar_encrypt(data["message"], shift)
+        key = generate_aes_key()
+        iv = generate_iv()
+        encrypted_message = aes_encrypt(data["message"], key, iv)
 
         emit("new_message", {
             "username": user["username"],
             "avatar": user["avatar"],
             "message": encrypted_message,
-            "key": shift
+            "key": base64.b64encode(key).decode(),
+            "iv": base64.b64encode(iv).decode()
         }, broadcast=True)
-
 
 @socketio.on("update_username")
 def handle_update_username(data):

@@ -31,9 +31,9 @@ socket.on("user_left", (data) => {
     addMessage(`${data.username} left the chat`, "system");
 });
 
-socket.on("new_message", (data) => {
+socket.on("new_message", async (data) => {
     console.log(data);
-    const decryptedMessage = caesarDecrypt(data.message, data.key);
+    const decryptedMessage = await aesDecrypt(data.message, data.key, data.iv);
     addMessage(decryptedMessage, "user", data.username, data.avatar);
 });
 
@@ -44,23 +44,44 @@ messageInput.addEventListener("keypress", (e) => {
 });
 updateUsernameButton.addEventListener("click", updateUsername);
 
-function caesarDecrypt(text, shift) {
-    const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ";
-    let decrypted = "";
-
-    for (let i = 0; i < text.length; i++) {
-        let char = text[i];
-        let charIndex = alphabet.indexOf(char);
-
-        if (charIndex !== -1) {
-            let newIndex = (charIndex - shift + alphabet.length) % alphabet.length;
-            decrypted += alphabet[newIndex];
-        } else {
-            decrypted += char;
-        }
+// Fonction pour convertir base64 en array buffer
+function base64ToArrayBuffer(base64) {
+    var binary_string = window.atob(base64);
+    var len = binary_string.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
     }
-    return decrypted;
+    return bytes.buffer;
 }
+
+// Fonction pour déchiffrer le message avec AES (mode CBC)
+async function aesDecrypt(encryptedMessage, keyBase64, ivBase64) {
+    const key = await crypto.subtle.importKey(
+        "raw",
+        base64ToArrayBuffer(keyBase64),
+        { name: "AES-CBC" },
+        false,
+        ["decrypt"]
+    );
+
+    const iv = base64ToArrayBuffer(ivBase64);
+    const encryptedData = base64ToArrayBuffer(encryptedMessage);
+
+    try {
+        const decryptedData = await crypto.subtle.decrypt(
+            { name: "AES-CBC", iv: iv },
+            key,
+            encryptedData
+        );
+        const decoder = new TextDecoder();
+        return decoder.decode(decryptedData);
+    } catch (err) {
+        console.error("Erreur lors du déchiffrement : ", err);
+        return null;
+    }
+}
+
 
 function sendMessage() {
     const message = messageInput.value.trim();
