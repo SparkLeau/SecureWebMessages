@@ -9,13 +9,36 @@ const updateUsernameButton = document.getElementById("update-username-button");
 let currentUsername = "";
 let aesKey = null;
 
-// Générer une clé AES unique pour l'utilisateur
-async function generateKey() {
-    aesKey = await crypto.subtle.generateKey(
-        { name: "AES-CBC", length: 256 },
+// RSA Key Generation
+async function generateRSAKeyPair() {
+    return await crypto.subtle.generateKey(
+        {
+            name: "RSA-OAEP",
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+            hash: "SHA-256"
+        },
         true,
         ["encrypt", "decrypt"]
     );
+}
+
+// Générer une clé AES unique pour l'utilisateur
+async function generateKey() {
+    aesKey = await window.crypto.subtle.generateKey(
+        {
+            name: "AES-CBC",
+            length: 256,
+        },
+        true,
+        ["encrypt", "decrypt"]
+    );
+    return aesKey;
+}
+
+// Génération d'un IV aléatoire
+function generateIV() {
+    return crypto.getRandomValues(new Uint8Array(16));
 }
 
 // Convertir une clé en Base64
@@ -34,11 +57,6 @@ async function base64ToKey(base64) {
     return await crypto.subtle.importKey("raw", bytes, { name: "AES-CBC" }, false, ["encrypt", "decrypt"]);
 }
 
-// Génération d'un IV aléatoire
-function generateIV() {
-    return crypto.getRandomValues(new Uint8Array(16));
-}
-
 // Convertir un array buffer en Base64
 function arrayBufferToBase64(buffer) {
     return btoa(String.fromCharCode(...new Uint8Array(buffer)));
@@ -55,34 +73,41 @@ function base64ToArrayBuffer(base64) {
 }
 
 // Chiffrement AES-CBC
-async function aesEncrypt(text) {
-    const iv = generateIV();
-    const encoder = new TextEncoder();
-    const encodedText = encoder.encode(text);
+async function encryptKeyWithRSA(publicKey, aesKey) {
+    let encoded = base64ToArrayBuffer(aesKey);
+    return await window.crypto.subtle.encrypt(
+      {
+        name: "RSA-OAEP",
+      },
+      publicKey,
+      encoded,
+    );
+}
 
-    const encrypted = await crypto.subtle.encrypt(
+async function aesEncrypt(message) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(message);
+    const iv = generateIV();
+    const encryptedData = await crypto.subtle.encrypt(
         { name: "AES-CBC", iv: iv },
         aesKey,
-        encodedText
+        data
     );
-
     return {
-        message: arrayBufferToBase64(encrypted),
-        iv: arrayBufferToBase64(iv),
-        key: await keyToBase64(aesKey)
+        message: arrayBufferToBase64(encryptedData),
+        iv: arrayBufferToBase64(iv)
     };
 }
 
 // Déchiffrement AES-CBC
-async function aesDecrypt(encryptedMessage, keyBase64, ivBase64) {
-    const key = await base64ToKey(keyBase64);
+async function aesDecrypt(encryptedMessage, aesKey, ivBase64) {
     const iv = base64ToArrayBuffer(ivBase64);
     const encryptedData = base64ToArrayBuffer(encryptedMessage);
 
     try {
         const decryptedData = await crypto.subtle.decrypt(
             { name: "AES-CBC", iv: iv },
-            key,
+            aesKey,
             encryptedData
         );
         const decoder = new TextDecoder();
@@ -93,16 +118,28 @@ async function aesDecrypt(encryptedMessage, keyBase64, ivBase64) {
     }
 }
 
-async function sendMessage() {
+async function sendMessage(GeneratePublicKey, aesKey) {
     const message = messageInput.value.trim();
     if (message) {
-        const encrypted = await aesEncrypt(message);
+        const publicKey = await crypto.subtle.importKey(
+            "spki",
+            base64ToArrayBuffer(GeneratePublicKey),
+            {
+                name: "RSA-OAEP",
+                hash: "SHA-256"
+            },
+            true,
+            ["encrypt"]
+        );
+
+        const encryptedMessage = await aesEncrypt(message);
+        const encryptedKey = await encryptKeyWithRSA(publicKey, aesKey);
 
         socket.emit("send_message", {
             username: currentUsername,
-            message: encrypted.message,
-            iv: encrypted.iv,
-            key: encrypted.key
+            message: encryptedMessage.message,
+            iv: encryptedMessage.iv,
+            key: arrayBufferToBase64(encryptedKey)
         });
 
         messageInput.value = "";
@@ -152,9 +189,10 @@ function addMessage(message, type, username = "", avatar = "") {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-
 // Initialisation de la clé AES
-generateKey();
+generateKey().then(async (aesKey) => {
+    return await keyToBase64(aesKey);
+});
 
 socket.on("set_username", (data) => {
     currentUsername = data.username;
@@ -186,7 +224,7 @@ socket.on("new_message", async (data) => {
 
 sendButton.addEventListener("click", sendMessage);
 messageInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") sendMessage();
+    if (e.key === "Enter") sendMessage(publicKey, aesKey);
 });
 updateUsernameButton.addEventListener("click", updateUsername);
 
