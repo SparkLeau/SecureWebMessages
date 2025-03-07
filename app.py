@@ -19,7 +19,8 @@ def handle_connect():
 
     users[request.sid] = {
         "username": username,
-        "avatar": avatar_url
+        "avatar": avatar_url,
+        "public_key": None
     }
 
     emit("user_joined", {
@@ -29,6 +30,11 @@ def handle_connect():
 
     emit("set_username", {"username": username})
 
+    # Send the public keys of all connected users to the new user
+    for sid, user in users.items():
+        if user["public_key"]:
+            emit("public_key", {"username": user["username"], "publicKey": user["public_key"]}, room=request.sid)
+
 @socketio.on("disconnect")
 def handle_disconnect():
     user = users.pop(request.sid, None)
@@ -36,6 +42,20 @@ def handle_disconnect():
         emit("user_left", {
             "username": user["username"]
         }, broadcast=True)
+
+@socketio.on("public_key")
+def handle_public_key(data):
+    if "publicKey" in data:
+        if request.sid in users:
+            users[request.sid]["public_key"] = data["publicKey"]
+            emit("public_key", {"username": users[request.sid]["username"], "publicKey": data["publicKey"]}, broadcast=True)
+    else:
+        print("publicKey not found in data")
+
+@socketio.on("request_public_key")
+def handle_request_public_key():
+    if request.sid in users and users[request.sid]["public_key"]:
+        emit("public_key", {"username": users[request.sid]["username"], "publicKey": users[request.sid]["public_key"]})
 
 @socketio.on("send_message")
 def handle_message(data):
