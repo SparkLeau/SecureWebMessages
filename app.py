@@ -82,5 +82,9 @@ def handle_update_username(data):
         "new_username": new_username
     }, broadcast=True)
 
+    # Send the updated public key to all users
+    if users[request.sid]["public_key"]:
+        emit("public_key", {"username": new_username, "publicKey": users[request.sid]["public_key"]}, broadcast=True)
+
 if __name__ == "__main__":
     socketio.run(app)

@@ -96,7 +96,7 @@ async function decryptKeyWithRSA(encryptedKeyBase64) {
         rsaKeyPair.privateKey,
         encryptedKey
     );
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
         "raw",
         rawKey,
         { name: "AES-CBC" },
@@ -188,6 +188,20 @@ async function retrieveKeys() {
     }
 }
 
+function removePublicKey(username) {
+    // Supprimer la clé publique du stockage de session
+    const publicKeysBase64 = JSON.parse(sessionStorage.getItem("publicKeys"));
+    if (publicKeysBase64 && publicKeysBase64[username]) {
+        delete publicKeysBase64[username];
+        sessionStorage.setItem("publicKeys", JSON.stringify(publicKeysBase64));
+    }
+
+    // Supprimer la clé publique de la mémoire
+    if (publicKeys[username]) {
+        delete publicKeys[username];
+    }
+}
+
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (message && Object.keys(publicKeys).length > 0) {
@@ -215,6 +229,14 @@ async function sendMessage() {
 function updateUsername() {
     const newUsername = usernameInput.value.trim();
     if (newUsername && newUsername !== currentUsername) {
+        // Mettre à jour les clés publiques dans le stockage de session
+        const publicKeysBase64 = JSON.parse(sessionStorage.getItem("publicKeys"));
+        if (publicKeysBase64 && publicKeysBase64[currentUsername]) {
+            publicKeysBase64[newUsername] = publicKeysBase64[currentUsername];
+            delete publicKeysBase64[currentUsername];
+            sessionStorage.setItem("publicKeys", JSON.stringify(publicKeysBase64));
+        }
+
         socket.emit("update_username", { username: newUsername });
         usernameInput.value = "";
     }
@@ -276,6 +298,20 @@ socket.on("set_username", (data) => {
 socket.on("username_updated", (data) => {
     addMessage(`${data.old_username} changed their name to ${data.new_username}`, "system");
 
+    // Mettre à jour les clés publiques dans le stockage de session
+    const publicKeysBase64 = JSON.parse(sessionStorage.getItem("publicKeys"));
+    if (publicKeysBase64 && publicKeysBase64[data.old_username]) {
+        publicKeysBase64[data.new_username] = publicKeysBase64[data.old_username];
+        delete publicKeysBase64[data.old_username];
+        sessionStorage.setItem("publicKeys", JSON.stringify(publicKeysBase64));
+    }
+
+    // Mettre à jour les clés publiques en mémoire
+    if (publicKeys[data.old_username]) {
+        publicKeys[data.new_username] = publicKeys[data.old_username];
+        delete publicKeys[data.old_username];
+    }
+
     if (data.old_username === currentUsername) {
         currentUsername = data.new_username;
         currentUsernameSpan.textContent = `Your username: ${currentUsername}`;
@@ -288,6 +324,7 @@ socket.on("user_joined", (data) => {
 
 socket.on("user_left", (data) => {
     addMessage(`${data.username} left the chat`, "system");
+    removePublicKey(data.username);
 });
 
 socket.on("new_message", async (data) => {
