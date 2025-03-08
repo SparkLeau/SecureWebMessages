@@ -79,11 +79,29 @@ function base64ToArrayBuffer(base64) {
 async function encryptKeyWithRSA(publicKey, aesKey) {
     const rawKey = await crypto.subtle.exportKey("raw", aesKey);
     return await window.crypto.subtle.encrypt(
-      {
-        name: "RSA-OAEP",
-      },
-      publicKey,
-      rawKey,
+        {
+            name: "RSA-OAEP",
+        },
+        publicKey,
+        rawKey
+    );
+}
+
+async function decryptKeyWithRSA(encryptedKeyBase64) {
+    const encryptedKey = base64ToArrayBuffer(encryptedKeyBase64);
+    const rawKey = await window.crypto.subtle.decrypt(
+        {
+            name: "RSA-OAEP",
+        },
+        rsaKeyPair.privateKey,
+        encryptedKey
+    );
+    return await window.crypto.subtle.importKey(
+        "raw",
+        rawKey,
+        { name: "AES-CBC" },
+        true,
+        ["encrypt", "decrypt"]
     );
 }
 
@@ -122,26 +140,6 @@ async function aesDecrypt(encryptedMessage, aesKey, ivBase64) {
 }
 
 function storeKeys() {
-    if (publicKey) {
-        const publicKeyExported = crypto.subtle.exportKey("spki", publicKey);
-        publicKeyExported.then((key) => {
-            const publicKeyBase64 = arrayBufferToBase64(key);
-            sessionStorage.setItem("publicKey", publicKeyBase64);
-            console.log("Public key stored in session storage:", publicKeyBase64);
-        }).catch((err) => {
-            console.error("Error exporting public key:", err);
-        });
-    }
-    if (aesKey) {
-        const aesKeyExported = crypto.subtle.exportKey("raw", aesKey);
-        aesKeyExported.then((key) => {
-            const aesKeyBase64 = arrayBufferToBase64(key);
-            sessionStorage.setItem("aesKey", aesKeyBase64);
-            console.log("AES key stored in session storage:", aesKeyBase64);
-        }).catch((err) => {
-            console.error("Error exporting AES key:", err);
-        });
-    }
     // Stocker les clés publiques des autres utilisateurs
     const publicKeysBase64 = {};
     for (const [username, key] of Object.entries(publicKeys)) {
@@ -149,7 +147,6 @@ function storeKeys() {
         keyExported.then((key) => {
             publicKeysBase64[username] = arrayBufferToBase64(key);
             sessionStorage.setItem("publicKeys", JSON.stringify(publicKeysBase64));
-            console.log("Public keys stored in session storage:", publicKeysBase64);
         }).catch((err) => {
             console.error("Error exporting public key:", err);
         });
@@ -157,22 +154,7 @@ function storeKeys() {
 }
 
 async function retrieveKeys() {
-    const publicKeyBase64 = sessionStorage.getItem("publicKey");
-    if (publicKeyBase64) {
-        publicKey = await crypto.subtle.importKey(
-            "spki",
-            base64ToArrayBuffer(publicKeyBase64),
-            {
-                name: "RSA-OAEP",
-                hash: "SHA-256"
-            },
-            true,
-            ["encrypt"]
-        );
-        console.log("Public key retrieved from session storage:", publicKey);
-    } else {
-        console.log("No public key found in session storage");
-    }
+    // Récupérer la clé publique de l'utilisateur
     const aesKeyBase64 = sessionStorage.getItem("aesKey");
     if (aesKeyBase64) {
         aesKey = await crypto.subtle.importKey(
@@ -182,7 +164,6 @@ async function retrieveKeys() {
             true,
             ["encrypt", "decrypt"]
         );
-        console.log("AES key retrieved from session storage:", aesKey);
     } else {
         console.log("No AES key found in session storage");
     }
@@ -202,7 +183,6 @@ async function retrieveKeys() {
             );
             publicKeys[username] = key;
         }
-        console.log("Public keys retrieved from session storage:", publicKeys);
     } else {
         console.log("No public keys found in session storage");
     }
@@ -210,27 +190,25 @@ async function retrieveKeys() {
 
 async function sendMessage() {
     const message = messageInput.value.trim();
-    if (message && publicKey) {
-        console.log("Sending message:", message);
-
+    if (message && Object.keys(publicKeys).length > 0) {
         const encryptedMessage = await aesEncrypt(message);
-        const encryptedKey = await encryptKeyWithRSA(publicKey, aesKey);
+        let encryptedKeys = {};
 
-        console.log("Encrypted message:", encryptedMessage);
-        console.log("Encrypted key:", encryptedKey);
+        for (const [username, key] of Object.entries(publicKeys)) {
+            const encryptedKey = await encryptKeyWithRSA(key, aesKey);
+            encryptedKeys[username] = arrayBufferToBase64(encryptedKey);
+        }
 
         socket.emit("send_message", {
             username: currentUsername,
             message: encryptedMessage.message,
             iv: encryptedMessage.iv,
-            key: arrayBufferToBase64(encryptedKey)
+            keys: encryptedKeys
         });
 
         messageInput.value = "";
     } else {
-        console.error("Message or publicKey is missing");
-        console.log("Message:", message);
-        console.log("Public Key:", publicKey);
+        console.error("Message or public keys are missing");
     }
 }
 
@@ -288,7 +266,6 @@ generateRSAKeyPair().then(async (keyPair) => {
     const publicKeyExported = await crypto.subtle.exportKey("spki", keyPair.publicKey);
     const publicKeyBase64 = arrayBufferToBase64(publicKeyExported);
     socket.emit("public_key", { publicKey: publicKeyBase64 });
-    console.log("Public key sent to server:", publicKeyBase64);
 });
 
 socket.on("set_username", (data) => {
@@ -314,15 +291,16 @@ socket.on("user_left", (data) => {
 });
 
 socket.on("new_message", async (data) => {
-    console.log(data);
-    const decryptedMessage = await aesDecrypt(data.message, aesKey, data.iv);
+    const decryptedKey = await decryptKeyWithRSA(data.key);
+    const rawDecryptedKey = await crypto.subtle.exportKey("raw", decryptedKey);
+
+    const decryptedMessage = await aesDecrypt(data.message, decryptedKey, data.iv);
     addMessage(decryptedMessage, "user", data.username, data.avatar);
 });
 
 // Socket listener to receive the public key
 socket.on("public_key", async (data) => {
     if (data.publicKey) {
-        console.log("Received public key from server:", data.publicKey);
         const importedPublicKey = await crypto.subtle.importKey(
             "spki",
             base64ToArrayBuffer(data.publicKey),
@@ -341,8 +319,6 @@ socket.on("public_key", async (data) => {
 });
 
 socket.on("connect", () => {
-    console.log("Connected to server");
-
     // Delay to ensure keys are stored before requesting them
     setTimeout(() => {
         socket.emit("request_public_key");

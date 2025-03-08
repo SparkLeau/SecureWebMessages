@@ -59,15 +59,17 @@ def handle_request_public_key():
 
 @socketio.on("send_message")
 def handle_message(data):
-    user = users.get(request.sid)
-    if user:
-        emit("new_message", {
-            "username": user["username"],
-            "avatar": user["avatar"],
-            "message": data["message"],  # Déjà chiffré côté client
-            "key": data["key"],  # Transmis directement
-            "iv": data["iv"]  # Transmis directement
-        }, broadcast=True)
+    sender = users.get(request.sid)
+    if sender:
+        for sid, user in users.items():
+            if user["username"] in data["keys"]:
+                emit("new_message", {
+                    "username": sender["username"],
+                    "avatar": sender["avatar"],
+                    "message": data["message"],  # Already encrypted on the client side
+                    "key": data["keys"][user["username"]],  # Send the corresponding encrypted key
+                    "iv": data["iv"]  # Send the IV directly
+                }, room=sid)
 
 @socketio.on("update_username")
 def handle_update_username(data):
