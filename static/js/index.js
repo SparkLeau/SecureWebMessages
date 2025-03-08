@@ -14,7 +14,7 @@ let publicKeys = {}; // Stocker les clés publiques des autres utilisateurs
 
 // RSA Key Generation
 async function generateRSAKeyPair() {
-    return await crypto.subtle.generateKey(
+    return await window.crypto.subtle.generateKey(
         {
             name: "RSA-OAEP",
             modulusLength: 2048,
@@ -41,12 +41,12 @@ async function generateKey() {
 
 // Génération d'un IV aléatoire
 function generateIV() {
-    return crypto.getRandomValues(new Uint8Array(16));
+    return window.crypto.getRandomValues(new Uint8Array(16));
 }
 
 // Convertir une clé en Base64
 async function keyToBase64(key) {
-    const raw = await crypto.subtle.exportKey("raw", key);
+    const raw = await window.crypto.subtle.exportKey("raw", key);
     return btoa(String.fromCharCode(...new Uint8Array(raw)));
 }
 
@@ -57,7 +57,7 @@ async function base64ToKey(base64) {
     for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);
     }
-    return await crypto.subtle.importKey("raw", bytes, { name: "AES-CBC" }, false, ["encrypt", "decrypt"]);
+    return await window.crypto.subtle.importKey("raw", bytes, { name: "AES-CBC" }, false, ["encrypt", "decrypt"]);
 }
 
 // Convertir un array buffer en Base64
@@ -77,7 +77,7 @@ function base64ToArrayBuffer(base64) {
 
 // Chiffrement AES-CBC
 async function encryptKeyWithRSA(publicKey, aesKey) {
-    const rawKey = await crypto.subtle.exportKey("raw", aesKey);
+    const rawKey = await window.crypto.subtle.exportKey("raw", aesKey);
     return await window.crypto.subtle.encrypt(
         {
             name: "RSA-OAEP",
@@ -96,7 +96,7 @@ async function decryptKeyWithRSA(encryptedKeyBase64) {
         rsaKeyPair.privateKey,
         encryptedKey
     );
-    return await crypto.subtle.importKey(
+    return await window.crypto.subtle.importKey(
         "raw",
         rawKey,
         { name: "AES-CBC" },
@@ -109,7 +109,7 @@ async function aesEncrypt(message) {
     const encoder = new TextEncoder();
     const data = encoder.encode(message);
     const iv = generateIV();
-    const encryptedData = await crypto.subtle.encrypt(
+    const encryptedData = await window.crypto.subtle.encrypt(
         { name: "AES-CBC", iv: iv },
         aesKey,
         data
@@ -126,7 +126,7 @@ async function aesDecrypt(encryptedMessage, aesKey, ivBase64) {
     const encryptedData = base64ToArrayBuffer(encryptedMessage);
 
     try {
-        const decryptedData = await crypto.subtle.decrypt(
+        const decryptedData = await window.crypto.subtle.decrypt(
             { name: "AES-CBC", iv: iv },
             aesKey,
             encryptedData
@@ -143,7 +143,7 @@ function storeKeys() {
     // Stocker les clés publiques des autres utilisateurs
     const publicKeysBase64 = {};
     for (const [username, key] of Object.entries(publicKeys)) {
-        const keyExported = crypto.subtle.exportKey("spki", key);
+        const keyExported = window.crypto.subtle.exportKey("spki", key);
         keyExported.then((key) => {
             publicKeysBase64[username] = arrayBufferToBase64(key);
             sessionStorage.setItem("publicKeys", JSON.stringify(publicKeysBase64));
@@ -157,7 +157,7 @@ async function retrieveKeys() {
     // Récupérer la clé publique de l'utilisateur
     const aesKeyBase64 = sessionStorage.getItem("aesKey");
     if (aesKeyBase64) {
-        aesKey = await crypto.subtle.importKey(
+        aesKey = await window.crypto.subtle.importKey(
             "raw",
             base64ToArrayBuffer(aesKeyBase64),
             { name: "AES-CBC" },
@@ -171,7 +171,7 @@ async function retrieveKeys() {
     const publicKeysBase64 = JSON.parse(sessionStorage.getItem("publicKeys"));
     if (publicKeysBase64) {
         for (const [username, keyBase64] of Object.entries(publicKeysBase64)) {
-            const key = await crypto.subtle.importKey(
+            const key = await window.crypto.subtle.importKey(
                 "spki",
                 base64ToArrayBuffer(keyBase64),
                 {
@@ -228,6 +228,10 @@ async function sendMessage() {
 
 function updateUsername() {
     const newUsername = usernameInput.value.trim();
+    if (Object.keys(publicKeys).includes(newUsername)) {
+        alert("Username already taken. Please choose a different username.");
+        return;
+    }
     if (newUsername && newUsername !== currentUsername) {
         // Mettre à jour les clés publiques dans le stockage de session
         const publicKeysBase64 = JSON.parse(sessionStorage.getItem("publicKeys"));
@@ -285,7 +289,7 @@ generateKey().then(async (aesKey) => {
 // Génération de la paire de clés RSA et envoi de la clé publique au serveur
 generateRSAKeyPair().then(async (keyPair) => {
     rsaKeyPair = keyPair;
-    const publicKeyExported = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+    const publicKeyExported = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
     const publicKeyBase64 = arrayBufferToBase64(publicKeyExported);
     socket.emit("public_key", { publicKey: publicKeyBase64 });
 });
@@ -329,7 +333,7 @@ socket.on("user_left", (data) => {
 
 socket.on("new_message", async (data) => {
     const decryptedKey = await decryptKeyWithRSA(data.key);
-    const rawDecryptedKey = await crypto.subtle.exportKey("raw", decryptedKey);
+    const rawDecryptedKey = await window.crypto.subtle.exportKey("raw", decryptedKey);
 
     const decryptedMessage = await aesDecrypt(data.message, decryptedKey, data.iv);
     addMessage(decryptedMessage, "user", data.username, data.avatar);
@@ -338,7 +342,7 @@ socket.on("new_message", async (data) => {
 // Socket listener to receive the public key
 socket.on("public_key", async (data) => {
     if (data.publicKey) {
-        const importedPublicKey = await crypto.subtle.importKey(
+        const importedPublicKey = await window.crypto.subtle.importKey(
             "spki",
             base64ToArrayBuffer(data.publicKey),
             {
