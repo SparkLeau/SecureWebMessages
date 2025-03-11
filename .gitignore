@@ -3,6 +3,8 @@ client.py
 clientMes.py
 server.py
 serverMes.py
+cert.pem
+key.pem
 
 server.py# Virtual environment
 venv/
