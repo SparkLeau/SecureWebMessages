@@ -48,7 +48,7 @@ async function generateRSASignKeyPair() {
 // NOUVELLE FONCTION: Signer un message avec la clé privée RSA
 async function signMessage(message) {
     try {
-        console.log("Début de la signature du message:", message.substring(0, 20) + "...");
+        console.log("DEMO - 📝 Signing message:", message.substring(0, 20) + (message.length > 20 ? "...": ""));
         
         // Si rsaSignKeyPair n'est pas disponible, convertir la clé principale
         if (!rsaSignKeyPair) {
@@ -69,10 +69,10 @@ async function signMessage(message) {
         );
         
         const signatureBase64 = arrayBufferToBase64(signature);
-        console.log("Signature générée avec succès:", signatureBase64.substring(0, 20) + "...");
+        console.log("DEMO - ✓ Signature generated successfully");
         return signatureBase64;
     } catch (error) {
-        console.error("Erreur lors de la signature du message:", error);
+        console.error("DEMO - ❌ Error signing message:", error);
         return null;
     }
 }
@@ -80,12 +80,11 @@ async function signMessage(message) {
 // NOUVELLE FONCTION: Vérifier une signature avec la clé publique RSA
 async function verifySignature(message, signatureBase64, username) {
     try {
-        console.log(`Début de la vérification de signature pour ${username}:`, message.substring(0, 20) + "...");
-        console.log("Signature à vérifier:", signatureBase64.substring(0, 20) + "...");
+        console.log(`DEMO - 🔍 Verifying signature from ${username} for message:`, message.substring(0, 20) + (message.length > 20 ? "...": ""));
         
         // Vérifier si nous avons la clé publique de cet utilisateur
         if (!publicKeys[username]) {
-            console.error("Pas de clé publique disponible pour cet utilisateur:", username);
+            console.error("DEMO - ❌ No public key available for user:", username);
             return false;
         }
         
@@ -116,10 +115,14 @@ async function verifySignature(message, signatureBase64, username) {
             data
         );
         
-        console.log("Résultat de la vérification:", result ? "Signature valide ✓" : "Signature invalide ⚠️");
+        if (result) {
+            console.log("DEMO - ✅ Signature verified: Message is authentic!");
+        } else {
+            console.log("DEMO - ⚠️ Invalid signature: Message may be tampered!");
+        }
         return result;
     } catch (error) {
-        console.error("Erreur lors de la vérification de signature:", error);
+        console.error("DEMO - ❌ Error verifying signature:", error);
         return false;
     }
 }
@@ -229,6 +232,7 @@ async function decryptKeyWithRSA(encryptedKeyBase64) {
 }
 
 async function aesEncrypt(message) {
+    console.log("DEMO - 🔒 Encrypting message with AES-CBC");
     const encoder = new TextEncoder();
     const data = encoder.encode(message);
     const iv = generateIV();
@@ -237,6 +241,7 @@ async function aesEncrypt(message) {
         aesKey,
         data
     );
+    console.log("DEMO - 🔒 Message encrypted successfully");
     return {
         message: arrayBufferToBase64(encryptedData),
         iv: arrayBufferToBase64(iv)
@@ -245,6 +250,7 @@ async function aesEncrypt(message) {
 
 // Déchiffrement AES-CBC
 async function aesDecrypt(encryptedMessage, aesKey, ivBase64) {
+    console.log("DEMO - 🔓 Decrypting message with AES-CBC");
     const iv = base64ToArrayBuffer(ivBase64);
     const encryptedData = base64ToArrayBuffer(encryptedMessage);
 
@@ -255,9 +261,10 @@ async function aesDecrypt(encryptedMessage, aesKey, ivBase64) {
             encryptedData
         );
         const decoder = new TextDecoder();
+        console.log("DEMO - 🔓 Message decrypted successfully");
         return decoder.decode(decryptedData);
     } catch (err) {
-        console.error("Erreur lors du déchiffrement : ", err);
+        console.error("DEMO - ❌ Error decrypting message:", err);
         return null;
     }
 }
@@ -277,19 +284,6 @@ function storeKeys() {
 }
 
 async function retrieveKeys() {
-    // Récupérer la clé publique de l'utilisateur
-    const aesKeyBase64 = sessionStorage.getItem("aesKey");
-    if (aesKeyBase64) {
-        aesKey = await window.crypto.subtle.importKey(
-            "raw",
-            base64ToArrayBuffer(aesKeyBase64),
-            { name: "AES-CBC" },
-            true,
-            ["encrypt", "decrypt"]
-        );
-    } else {
-        console.log("No AES key found in session storage");
-    }
     // Récupérer les clés publiques des autres utilisateurs
     const publicKeysBase64 = JSON.parse(sessionStorage.getItem("publicKeys"));
     if (publicKeysBase64) {
@@ -329,12 +323,15 @@ function removePublicKey(username) {
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (message && Object.keys(publicKeys).length > 0) {
-        console.log("Envoi d'un message:", message);
+        console.log("DEMO - 📤 Sending message:", message);
+        console.log("DEMO - 👤 Current user:", currentUsername);
+        console.log("DEMO - 🔑 Number of recipients:", Object.keys(publicKeys).length);
         
         // Chiffrer le message comme avant
         const encryptedMessage = await aesEncrypt(message);
         let encryptedKeys = {};
 
+        console.log("DEMO - 🔐 Encrypting session key for each recipient");
         for (const [username, key] of Object.entries(publicKeys)) {
             const encryptedKey = await encryptKeyWithRSA(key, aesKey);
             encryptedKeys[username] = arrayBufferToBase64(encryptedKey);
@@ -342,9 +339,9 @@ async function sendMessage() {
 
         // NOUVEAU: Signer le message original
         const signature = await signMessage(message);
-        console.log("Message signé, signature:", signature ? "Générée" : "Non générée");
 
         // Envoyer le message chiffré avec la signature
+        console.log("DEMO - 📡 Emitting message to server");
         socket.emit("send_message", {
             username: currentUsername,
             message: encryptedMessage.message,
@@ -354,8 +351,9 @@ async function sendMessage() {
         });
 
         messageInput.value = "";
+        console.log("DEMO - ✅ Message sent successfully");
     } else {
-        console.error("Message ou clés publiques manquantes");
+        console.error("DEMO - ❌ Message or public keys missing");
     }
 }
 
@@ -432,9 +430,11 @@ generateKey().then(async (aesKey) => {
 
 // Génération de la paire de clés RSA et envoi de la clé publique au serveur
 generateRSAKeyPair().then(async (keyPair) => {
+    console.log("DEMO - 🔑 RSA key pair generated");
     rsaKeyPair = keyPair;
     const publicKeyExported = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
     const publicKeyBase64 = arrayBufferToBase64(publicKeyExported);
+    console.log("DEMO - 🔄 Sharing public key with server");
     socket.emit("public_key", { publicKey: publicKeyBase64 });
 });
 
@@ -483,17 +483,20 @@ socket.on("user_left", (data) => {
 // MODIFIER la fonction socket.on("new_message") pour vérifier la signature avec logs
 socket.on("new_message", async (data) => {
     try {
-        console.log("Réception d'un message de:", data.username);
+        console.log("DEMO - 📥 Receiving message from:", data.username);
         
+        console.log("DEMO - 🔑 Decrypting session key with our private RSA key");
         const decryptedKey = await decryptKeyWithRSA(data.key);
+        
+        console.log("DEMO - 📄 Decrypting message content with session key");
         const decryptedMessage = await aesDecrypt(data.message, decryptedKey, data.iv);
         
-        console.log("Message déchiffré:", decryptedMessage);
+        console.log("DEMO - 📄 Message content:", decryptedMessage);
         
         let signatureStatus = null;
         
         if (data.signature) {
-            console.log("Signature trouvée, vérification...");
+            console.log("DEMO - 🔏 Signature found, verifying authenticity...");
             const isVerified = await verifySignature(
                 decryptedMessage,
                 data.signature,
@@ -502,11 +505,11 @@ socket.on("new_message", async (data) => {
             signatureStatus = {
                 verified: isVerified
             };
-            console.log("Statut de la signature:", isVerified ? "Vérifié ✓" : "Non vérifié ⚠️");
         } else {
-            console.log("Pas de signature trouvée dans le message");
+            console.log("DEMO - ⚠️ No signature found in the message");
         }
         
+        console.log("DEMO - 📊 Displaying message in chat window");
         addMessage(
             decryptedMessage,
             "user",
@@ -515,9 +518,9 @@ socket.on("new_message", async (data) => {
             signatureStatus
         );
     } catch (error) {
-        console.error("Erreur lors de la réception du message:", error);
+        console.error("DEMO - ❌ Error receiving message:", error);
         addMessage(
-            "Message chiffré (impossible à déchiffrer)",
+            "Encrypted message (unable to decrypt)",
             "user",
             data.username,
             data.avatar
@@ -548,10 +551,8 @@ socket.on("public_key", async (data) => {
 // NOUVEAU écouteur socket pour recevoir les clés de vérification
 socket.on("verify_key", async (data) => {
     if (data.verifyKey) {
-        console.log("Réception de la clé de vérification de:", data.username);
         const importedVerifyKey = await importVerifyKey(data.verifyKey);
         verifyKeys[data.username] = importedVerifyKey;
-        console.log("Clé de vérification importée pour:", data.username);
     }
 });
 
@@ -570,14 +571,14 @@ socket.on("connect", () => {
 
 // Retrieve keys from session storage on page load
 window.addEventListener("load", async function() {
-    console.log("Chargement de la page, initialisation des clés");
+    console.log("DEMO - 🔄 Page loaded, initializing secure messenger");
     
     // Récupérer les clés existantes
     await retrieveKeys();
     
     // Si nous n'avons pas encore de paire de clés RSA, en générer une nouvelle
     if (!rsaKeyPair) {
-        console.log("Génération d'une nouvelle paire de clés RSA...");
+        console.log("DEMO - 🔑 Generating new RSA key pair");
         rsaKeyPair = await generateRSAKeyPair();
         
         // Exporter et envoyer la clé publique
@@ -588,7 +589,7 @@ window.addEventListener("load", async function() {
     
     // Générer la paire de clés de signature à partir de la paire principale
     rsaSignKeyPair = await convertToSignKeyPair(rsaKeyPair);
-    console.log("Paire de clés de signature générée avec succès");
+    console.log("DEMO - 🔏 Signature keys ready");
 });
 
 sendButton.addEventListener("click", sendMessage);
@@ -600,9 +601,7 @@ updateUsernameButton.addEventListener("click", updateUsername);
 // NOUVELLE FONCTION: Partager la clé publique de vérification avec logs
 function shareVerifyKey() {
     if (rsaSignKeyPair) {
-        console.log("Partage de la clé de vérification pour:", currentUsername);
         exportVerifyKey(rsaSignKeyPair.publicKey).then(verifyKeyBase64 => {
-            console.log("Clé de vérification exportée:", verifyKeyBase64.substring(0, 20) + "...");
             socket.emit("verify_key", {
                 username: currentUsername,
                 verifyKey: verifyKeyBase64
@@ -615,7 +614,6 @@ function shareVerifyKey() {
 
 // NOUVELLE FONCTION: Utiliser la même paire de clés RSA pour le chiffrement et la signature
 async function generateCombinedRSAKeyPair() {
-    console.log("Génération d'une paire de clés RSA combinée pour chiffrement et signature...");
     const keyPair = await window.crypto.subtle.generateKey(
         {
             name: "RSA-OAEP",
@@ -630,7 +628,6 @@ async function generateCombinedRSAKeyPair() {
     // Créer une paire de clés pour la signature à partir de la même paire de clés
     const signKeyPair = await convertToSignKeyPair(keyPair);
     
-    console.log("Paire de clés RSA combinée générée avec succès");
     return {
         encryptPair: keyPair,
         signPair: signKeyPair
@@ -639,7 +636,6 @@ async function generateCombinedRSAKeyPair() {
 
 // NOUVELLE FONCTION: Convertir une clé RSA-OAEP en clé RSASSA-PKCS1-v1_5
 async function convertToSignKeyPair(rsaKeyPair) {
-    console.log("Conversion de la paire de clés pour la signature...");
     
     // Exporter les clés
     const publicKeyData = await window.crypto.subtle.exportKey(
@@ -675,7 +671,6 @@ async function convertToSignKeyPair(rsaKeyPair) {
         ["sign"]
     );
     
-    console.log("Conversion des clés réussie");
     return {
         publicKey: publicKey,
         privateKey: privateKey
