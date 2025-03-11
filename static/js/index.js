@@ -677,7 +677,4 @@ async function convertToSignKeyPair(rsaKeyPair) {
     };
 }
 
-// SUPPRIMER les fonctions et écouteurs liés aux clés de vérification séparées
-// Supprimez la fonction shareVerifyKey() et l'écouteur socket.on("verify_key", ...)
-
 

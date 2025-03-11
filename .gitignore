@@ -8,6 +8,7 @@ key.pem
 
 server.py# Virtual environment
 venv/
+env/
 venv*/
 .Python
 bin/
