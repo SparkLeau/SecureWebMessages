@@ -73,7 +73,8 @@ def handle_message(data):
                     "avatar": sender["avatar"],
                     "message": data["message"],  # Already encrypted on the client side
                     "key": data["keys"][user["username"]],  # Send the corresponding encrypted key
-                    "iv": data["iv"]  # Send the IV directly
+                    "iv": data["iv"],  # Send the IV directly
+                    "signature": data.get("signature")  # Include the signature if present
                 }, room=sid)
 
 @socketio.on("update_username")
@@ -90,6 +91,16 @@ def handle_update_username(data):
     # Send the updated public key to all users
     if users[request.sid]["public_key"]:
         emit("public_key", {"username": new_username, "publicKey": users[request.sid]["public_key"]}, broadcast=True)
+
+@socketio.on("verify_key")
+def handle_verify_key(data):
+    if "verifyKey" in data and request.sid in users:
+        users[request.sid]["verify_key"] = data["verifyKey"]
+        # Broadcast the verification key to all users
+        emit("verify_key", {
+            "username": data["username"],
+            "verifyKey": data["verifyKey"]
+        }, broadcast=True)
 
 if __name__ == "__main__":
     socketio.run(app, host='0.0.0.0', port=5000, ssl_context=('cert.pem','key.pem'))
