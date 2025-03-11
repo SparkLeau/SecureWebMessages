@@ -1,9 +1,14 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 import random
+import eventlet
+import eventlet.wsgi
+import ssl
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode="threading")
+    
+
 
 users = {}
 
@@ -87,4 +92,4 @@ def handle_update_username(data):
         emit("public_key", {"username": new_username, "publicKey": users[request.sid]["public_key"]}, broadcast=True)
 
 if __name__ == "__main__":
-    socketio.run(app, ssl_context=('cert.pem','key.pem')) 
+    socketio.run(app, host='0.0.0.0', port=5000, ssl_context=('cert.pem','key.pem'))
